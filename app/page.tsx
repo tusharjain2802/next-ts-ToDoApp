@@ -1,101 +1,224 @@
-import Image from "next/image";
+'use client';
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import toast, { Toaster } from "react-hot-toast";
+import { MdDelete } from "react-icons/md";
+import { FaEdit } from "react-icons/fa";
+import Footer from "@/app/components/Footer";
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const navigate = useRouter();
+  const storedEmail = localStorage.getItem("userEmail");
+  const [inputValue, setInputValue] = useState("");
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  interface DataItem {
+    value: string; 
+    isEditing: boolean; 
+  }
+
+  const [dataArray, setDataArray] = useState<DataItem[]>([]);
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value);
+  };
+  const handleDelete = async (index: number) => {
+    try {
+      const response = await fetch("http://localhost:5000/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: storedEmail, index: index }),
+      });
+      const json = await response.json();
+      if (json.success) {
+        window.location.reload();
+      } else {
+        console.error("Failed to delete item");
+      }
+    } catch (error) {
+      console.error("Error deleting item:", error);
+    }
+  };
+  const handleLogOut = async () => {
+    localStorage.removeItem("userEmail");
+    navigate.push("/login");
+  };
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    try {
+      console.log(storedEmail);
+      const response = await fetch("http://localhost:5000/sendData", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: storedEmail, data: inputValue }),
+      });
+
+      const json = await response.json();
+      if (json.success) {
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error("Error sending data:", error);
+    }
+  };
+  const loadItems = async () => {
+    const response = await fetch("http://localhost:5000/getItems", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email: storedEmail }),
+    });
+    const json = await response.json();
+    console.log(json);
+    if (json.success) {
+      const formattedData = json.data.map((item: string) => ({
+        value: item,
+        isEditing: false,
+      }));
+      setDataArray(formattedData);
+      navigate.push("/");
+    } else {
+      toast.error(json.error);
+      navigate.push("/login");
+    }
+  };
+
+  useEffect(() => {
+    loadItems();
+  }, []);
+
+  const handleSaveEdit = async (index: number, value: string) => {
+    try {
+      const response = await fetch("http://localhost:5000/edit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: storedEmail,
+          index: index,
+          newText: value,
+        }),
+      });
+      const json = await response.json();
+      if (json.success) {
+        handleToggleEdit(index);
+        toast.success("Successfully updated the item");
+      } else {
+        console.error("Failed to update item");
+      }
+    } catch (error) {
+      console.error("Error updating item:", error);
+    }
+  };
+
+ 
+
+  const handleToggleEdit = (index: number) => {
+    setDataArray((currentData : DataItem[]) =>
+      currentData.map((item : DataItem, i : number) =>
+        i === index ? { ...item, isEditing: !item.isEditing } : item
+      )
+    );
+  };
+
+  const handleChangeItem = (index: number, newValue:string) => {
+    setDataArray((currentData : DataItem[]) =>
+      currentData.map((item: DataItem, i : number) =>
+        i === index ? { ...item, value: newValue } : item
+      )
+    );
+  };
+
+  function getDate() {
+    const today = new Date();
+    const day = today.toLocaleDateString("en-US",  {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+    return day;
+  }
+  const day = getDate();
+  if (storedEmail) {
+    return (
+      <div>
+        <header className="header">
+          <nav>
+            <ul className="nav-links">
+              <li>
+                <span onClick={handleLogOut} className="nav-link">
+                  LogOut
+                </span>
+              </li>
+            </ul>
+          </nav>
+        </header>
+        <div className="box" id="heading">
+          <h1>{day}</h1>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+        <div className="box">
+          {dataArray.map((item, index) =>
+            item.isEditing ? (
+              <form
+              key={index}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSaveEdit(index, item.value);
+                }}
+              >
+                <input
+                  type="text"
+                  style={{ border: "none", marginLeft: "20px" }}
+                  value={item.value}
+                  onChange={(e) => handleChangeItem(index, e.target.value)}
+                  autoFocus
+                />
+                <button className="submitsave" type="submit">
+                  Save
+                </button>
+              </form>
+            ) : (
+              <div key={index} className="item">
+                <MdDelete onClick={() => handleDelete(index)} />
+                <p>{item.value}</p>
+                <FaEdit
+                  className="faedit"
+                  onClick={() => handleToggleEdit(index)}
+                />
+              </div>
+            )
+          )}
+          <form className="item" onSubmit={handleSubmit}>
+            <input
+              onChange={handleInputChange}
+              type="text"
+              name="newItem"
+              placeholder="New Item"
+              className="inputlist"
+              autoComplete="off"
+            ></input>
+            <button type="submit" name="list" value="">
+              +
+            </button>
+          </form>
+        </div>
+        <Footer />
+        <Toaster />
+      </div>
+    );
+  } else {
+    return (
+      <div className="login-prompt">
+        <h2>Please Login Before Using the Todo App</h2>
+        <p>You need to be logged in to access this feature.</p>
+        <Link className="text-black" href="/login">Login Here</Link>
+        <Toaster />
+      </div>
+    );
+  }
 }
